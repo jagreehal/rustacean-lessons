@@ -104,7 +104,8 @@ biggest gap in async Rust. You have two fixes:
 
 1. Make the steps atomic, with a database transaction. A cancelled transaction rolls back.
 2. Run the critical part with `tokio::spawn`. A dropped handle doesn't stop the task, so
-   it finishes even though the caller stopped waiting.
+   it finishes even though the caller stopped waiting. A runtime shutting down does stop
+   it, so work that must survive a restart needs a transaction or a durable record.
 
 ## Locks and `.await`
 
@@ -149,6 +150,7 @@ sees two payments. Lesson 8 runs both versions and counts the charges.
 | 5 | A `JoinSet` stops its tasks | `lesson_5_a_join_set_stops_its_tasks_when_dropped` |
 | 6 | Each `.await` can end the function | `lesson_6_each_await_is_a_place_the_function_can_end` |
 | 6 | Cancellation can lose money | `lesson_6_cancellation_can_lose_money` |
+| 6 | Runtime shutdown drops a spawned task | `lesson_6_runtime_shutdown_drops_a_spawned_task` |
 | 7 | A lock across `.await` can't compile in a task | `lesson_7_holding_a_lock_across_await_does_not_compile` |
 | 8 | A stable reference charges once | `lesson_8_a_stable_reference_charges_once` |
 

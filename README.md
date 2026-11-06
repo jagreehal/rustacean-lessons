@@ -45,6 +45,33 @@ coding agent can see what this function does without opening it.
 | 6. Guard rails | Turn rules into build failures | [Guide](guide/06-guard-rails.md) | [Code](src/ch06_guard_rails.rs) |
 | 7. Payment | Combine all of it in one workflow | [Guide](guide/07-payment.md) | [Code](src/ch07_payment.rs) |
 
+## Use the lessons in your agent
+
+Each chapter is also a skill, so your coding agent can apply these patterns in your own
+project. A skill is one folder holding one `SKILL.md`, and it needs nothing else from this
+repo. Install them all, or pick one. This works with Claude Code, Codex, Cursor and others:
+
+```bash
+npx skills add jagreehal/rustacean-lessons
+npx skills add jagreehal/rustacean-lessons --skill rust-errors
+```
+
+You can also copy a folder from [skills/](skills/) into your agent's skills directory, such
+as `.claude/skills/` for Claude Code or `.agents/skills/` for Codex.
+
+| Skill | Your agent uses it to |
+|---|---|
+| [`rust-errors`](skills/rust-errors/SKILL.md) | Model failures as enums, and map them at the boundary |
+| [`rust-services`](skills/rust-services/SKILL.md) | Write `fn(args, deps)`, with hand-written stand-ins |
+| [`rust-resources`](skills/rust-resources/SKILL.md) | Wire the app in one place, and clean up with `Drop` |
+| [`rust-illegal-states`](skills/rust-illegal-states/SKILL.md) | Validate with newtypes and `TryFrom`, and type each stage |
+| [`rust-async`](skills/rust-async/SKILL.md) | Handle timeouts, retries, tasks and cancellation |
+| [`rust-guard-rails`](skills/rust-guard-rails/SKILL.md) | Install the denied lints, and fix what they report |
+| [`rust-payments`](skills/rust-payments/SKILL.md) | Build workflows that can't lose or repeat a side effect |
+
+A skill is advice your agent can miss. Install `rust-guard-rails` first, because its
+rules fail the build.
+
 ## Run it
 
 ```bash
@@ -88,12 +115,13 @@ you don't know it, read that column as "most languages".
 
 | Problem | What you have to do |
 |---|---|
-| Async cleanup is skipped on cancellation ([guide](guide/03-resources.md#the-cost-drop-cant-wait), [code](src/ch03_resources.rs)) | Use a guard whose `Drop` spawns the cleanup ([guide](guide/07-payment.md#a-lock-that-survives-cancellation), [code](src/ch07_payment.rs)) |
+| Async cleanup is skipped on cancellation ([guide](guide/03-resources.md#the-cost-drop-cant-wait), [code](src/ch03_resources.rs)) | Use a guard whose `Drop` spawns the cleanup ([guide](guide/07-payment.md#a-lock-that-survives-cancellation), [code](src/ch07_payment.rs)), plus an expiry, because a runtime shutdown drops that task |
 | A charge with no record frees its key ([guide](guide/07-payment.md#the-gap-the-lock-doesnt-cover), [code](src/ch07_payment.rs)) | Rely on the provider honouring the reference, or hold the key until reconciled |
 | Any `.await` can be the last line that runs ([guide](guide/05-async.md#the-rule-every-await-is-an-exit), [code](src/ch05_async.rs)) | Use transactions, or spawn the critical part |
 | Enums are nominal, so handling one error can't narrow the type ([guide](guide/01-errors.md#the-cost), [code](src/ch01_errors.rs)) | Write the second enum |
 | Error unions and dependencies aren't inferred | Write them yourself. The compiler checks them |
 | Race conditions still compile ([guide](guide/04-illegal-states.md#the-cost-race-conditions-still-compile), [code](src/ch04_illegal_states.rs)) | Read and write under one lock |
+| A skill is advice, so an agent can ignore it ([skills](skills/)) | Install `rust-guard-rails`, so the rules that matter fail the build |
 | Some silent drops pass every lint ([guide](guide/06-guard-rails.md#the-cost-three-silent-drops-get-through), [code](src/ch06_guard_rails.rs)) | `_ = x`, `x.ok();` and `drop(x)` need review |
 
 ## The story report

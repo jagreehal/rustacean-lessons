@@ -104,5 +104,8 @@ then, code review has to find them.
 |---|---|---|
 | 1 | Each denied lint rejects its example | `lesson_1_every_denied_lint_rejects_its_example` |
 | 2 | Three silent drops still get through | `lesson_2_three_silent_drops_still_get_through` |
+| 3 | The guard rails skill installs these rails | `lesson_3_the_guard_rails_skill_installs_these_rails` |
+| 4 | Each skill stands alone | `lesson_4_each_skill_stands_alone` |
+| 4 | A skill can link by full URL only | `lesson_4_a_skill_can_link_by_full_url_only` |
 
 Next: [chapter 7, the payment capstone](07-payment.md).

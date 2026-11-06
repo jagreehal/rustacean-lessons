@@ -327,6 +327,23 @@ async fn lesson_6_a_spawned_critical_section_survives_cancellation() {
     assert_eq!(accounts.total(), 100); // the transfer finished anyway
 }
 
+// GAP. A spawned task outlives its caller, and it doesn't outlive the runtime.
+// Shutting down drops it at its next `.await`, so the line below that never runs.
+#[test]
+fn lesson_6_runtime_shutdown_drops_a_spawned_task() -> Result<(), std::io::Error> {
+    let finished = Arc::new(AtomicU32::new(0));
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_time()
+        .build()?;
+
+    runtime.spawn(finish_after_a_second(finished.clone()));
+    runtime.block_on(tokio::task::yield_now()); // the task starts, then waits
+    drop(runtime);
+
+    assert_eq!(finished.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
 async fn three_steps(done: &AtomicU32) {
     for _ in 0..3 {
         sleep(Duration::from_secs(1)).await;

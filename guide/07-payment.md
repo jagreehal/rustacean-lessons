@@ -18,7 +18,9 @@ flowchart TD
     C -->|yes| R1[Return the existing payment]
     C -->|no| D{Lock acquired?}
     D -->|no| X2[Conflict, 409]
-    D -->|yes| E{Provider call}
+    D -->|yes| K{Key recorded by now?}
+    K -->|yes| R1
+    K -->|no| E{Provider call}
     E -->|rejected| X3[Rejected, 402]
     E -->|down or timed out| F{Attempts left?}
     F -->|yes| E
@@ -69,6 +71,9 @@ if let Some(existing) = deps.store.find_by_key(&payment.key).await? {
     return Ok(existing);
 }
 let locked = payment.lock(deps).await?;
+if let Some(existing) = deps.store.find_by_key(&locked.payment.key).await? {
+    return Ok(existing);
+}
 let charged = locked.charge(deps).await?;
 charged.record(deps).await
 ```
@@ -81,6 +86,11 @@ Clients retry, so you need protection at two levels:
 |---|---|---|
 | Idempotency key | A repeat after the first one finished | `find_by_key` returns the stored payment |
 | Lock | A repeat while the first is running | `acquire_lock` turns the second one away |
+
+The two layers leave a gap between them. Two requests can both find no payment, then the
+first can charge, record and release before the second takes the lock. So you look up the
+key a second time while holding the lock. The first lookup is the fast path, and the
+second is the one you can trust, because a request records before it releases.
 
 Inside `charge`, stable retry identity (chapter 5) covers a third case. The provider
 receives the same reference on each attempt, so a timed-out attempt that took the money
@@ -97,9 +107,10 @@ impl Drop for LockGuard {
     fn drop(&mut self) {
         let store = self.store.clone();
         let key = std::mem::take(&mut self.key);
+        let token = self.token;
         let Ok(runtime) = Handle::try_current() else { return };
         runtime.spawn(async move {
-            // release_lock runs here, as its own task
+            // release_lock(&key, token) runs here, as its own task
         });
     }
 }
@@ -121,12 +132,33 @@ sequenceDiagram
 ```
 
 `Drop` runs on each way out, and the spawned task keeps going after the request has gone.
-This is the Rust-shaped answer to cleanup under cancellation. Use it for anything that must
-happen.
+This is the Rust-shaped answer to cleanup under cancellation. It's best effort, so back it
+with an expiry or a durable record wherever the cleanup matters.
 
-Two limits remain. A process crash skips `Drop`, so a real lock also needs an expiry. And the
-release lands a moment after the request ends, so an instant retry can see `Conflict`, which
+Two limits remain. A process crash skips `Drop`, and a runtime shutting down drops the spawned
+task, so a real lock also needs an expiry. And the release lands a moment after the request ends, so an instant retry can see `Conflict`, which
 is safe.
+
+## A lock that expires needs an owner
+
+An expiry adds a new way to go wrong. The lock can pass to another request while the first
+request's guard still exists, and that guard's cleanup would free a lock it no longer holds:
+
+```mermaid
+sequenceDiagram
+    participant A as Request A
+    participant S as Store
+    participant B as Request B
+    A->>S: acquire_lock, gets token 1
+    Note over S: the lock expires
+    B->>S: acquire_lock, gets token 2
+    A->>S: release_lock with token 1
+    Note over S: token 1 no longer holds it, so nothing changes
+```
+
+So `acquire_lock` returns a `LockToken`, and `release_lock` frees the lock only if that token
+still holds it. A real store has to make that check and the delete one atomic step, because a
+separate read leaves the same gap open.
 
 ## The gap the lock doesn't cover
 
@@ -175,6 +207,7 @@ The README shows how to generate the report.
 | A bad request | `a_bad_request_never_reaches_the_provider` |
 | A repeated request | `a_repeated_request_returns_the_first_payment` |
 | A racing request | `a_racing_request_is_turned_away` |
+| A request that lost a race | `a_request_that_finds_the_lock_free_checks_again_before_charging` |
 | A rejected card | `a_rejected_card_is_not_retried` |
 | A brief outage | `a_brief_outage_is_retried_without_double_charging` |
 | A long outage | `a_long_outage_is_recorded_as_a_failure` |
@@ -182,6 +215,7 @@ The README shows how to generate the report.
 | A finished payment | `a_finished_payment_frees_its_key` |
 | A failed payment | `a_failed_payment_can_be_tried_again` |
 | A cancelled request | `a_cancelled_request_can_be_tried_again` |
+| A late cleanup | `a_late_cleanup_leaves_the_next_requests_lock_alone` |
 | A retry after a lost record | `a_retry_after_a_lost_record_reuses_the_reference` |
 
 ## Your next step

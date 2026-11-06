@@ -30,9 +30,9 @@
 // report a non-Rust reader can follow. See the README for how to generate it.
 // ═════════════════════════════════════════════════════════════
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -42,8 +42,8 @@ use tokio::sync::{Mutex, Notify};
 use tokio::time::timeout;
 
 use payment::{
-    ChargeRequest, PayError, PaymentDeps, PaymentRequest, PaymentStore, Provider, ProviderError,
-    RetryPolicy, StoreDown, create_payment,
+    ChargeRequest, LockToken, PayError, PaymentDeps, PaymentRequest, PaymentStore, Provider,
+    ProviderError, RetryPolicy, StoreDown, create_payment,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -86,6 +86,11 @@ mod payment {
 
     #[derive(Debug, PartialEq)]
     pub struct StoreDown;
+
+    // Proof of who holds a lock. A lock can expire and pass to another request, so
+    // the key alone can't say whose it is.
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    pub struct LockToken(pub u64);
 
     #[derive(Debug, PartialEq)]
     pub enum ProviderError {
@@ -131,8 +136,9 @@ mod payment {
     #[async_trait]
     pub trait PaymentStore: Send + Sync {
         async fn find_by_key(&self, key: &str) -> Result<Option<String>, StoreDown>;
-        async fn acquire_lock(&self, key: &str) -> Result<bool, StoreDown>;
-        async fn release_lock(&self, key: &str) -> Result<(), StoreDown>;
+        async fn acquire_lock(&self, key: &str) -> Result<Option<LockToken>, StoreDown>;
+        // Frees the lock only if `token` still holds it, as one atomic step.
+        async fn release_lock(&self, key: &str, token: LockToken) -> Result<(), StoreDown>;
         async fn record_success(&self, key: &str, payment_id: &str) -> Result<(), StoreDown>;
         async fn record_failure(&self, key: &str) -> Result<(), StoreDown>;
     }
@@ -198,17 +204,18 @@ mod payment {
 
     impl ValidPayment {
         async fn lock(self, deps: &PaymentDeps) -> Result<Locked, PayError> {
-            if deps.store.acquire_lock(&self.key).await? {
-                let guard = LockGuard {
-                    store: deps.store.clone(),
-                    key: self.key.clone(),
-                };
-                return Ok(Locked {
-                    payment: self,
-                    guard,
-                });
-            }
-            Err(PayError::Conflict)
+            let Some(token) = deps.store.acquire_lock(&self.key).await? else {
+                return Err(PayError::Conflict);
+            };
+            let guard = LockGuard {
+                store: deps.store.clone(),
+                key: self.key.clone(),
+                token,
+            };
+            Ok(Locked {
+                payment: self,
+                guard,
+            })
         }
     }
 
@@ -217,23 +224,26 @@ mod payment {
     // Drop runs on all of them, but it can't await, so it hands the work to a task
     // that a cancelled request can't stop.
     //
-    // Two limits. Nothing runs if the process dies, so a real lock also needs an expiry.
+    // Two limits. Nothing runs if the process dies, and a runtime shutting down drops
+    // the spawned task (ch05 lesson 6), so a real lock also needs an expiry.
     // And the release lands a moment later, so an instant retry can see Conflict,
     // which is safe.
     struct LockGuard {
         store: Arc<dyn PaymentStore>,
         key: String,
+        token: LockToken,
     }
 
     impl Drop for LockGuard {
         fn drop(&mut self) {
             let store = self.store.clone();
             let key = std::mem::take(&mut self.key);
+            let token = self.token;
             let Ok(runtime) = Handle::try_current() else {
                 return; // shutting down, so the expiry frees it
             };
             runtime.spawn(async move {
-                if store.release_lock(&key).await.is_err() {
+                if store.release_lock(&key, token).await.is_err() {
                     eprintln!("lock {key} not released, waiting for it to expire");
                 }
             });
@@ -318,6 +328,13 @@ mod payment {
         }
 
         let locked = payment.lock(deps).await?;
+
+        // A racing request can finish between the lookup above and this lock. Only a
+        // lookup made while holding the lock can trust its answer.
+        if let Some(existing) = deps.store.find_by_key(&locked.payment.key).await? {
+            return Ok(existing);
+        }
+
         let charged = locked.charge(deps).await?;
         charged.record(deps).await
     }
@@ -330,24 +347,47 @@ mod payment {
 #[derive(Default)]
 struct FakeStore {
     existing: Option<String>,
-    held_locks: Mutex<HashSet<String>>,
+    // A racing request recorded this and released its lock, after our first lookup.
+    finished_before_lock: Option<String>,
+    lock_taken: AtomicBool,
+    held_locks: Mutex<HashMap<String, LockToken>>,
+    tokens_issued: AtomicU64,
     down_when_recording: AtomicBool,
     recorded: Mutex<Vec<String>>,
     lock_released: Notify,
 }
 
+impl FakeStore {
+    async fn expire_lock(&self, key: &str) {
+        self.held_locks.lock().await.remove(key);
+    }
+}
+
 #[async_trait]
 impl PaymentStore for FakeStore {
     async fn find_by_key(&self, _key: &str) -> Result<Option<String>, StoreDown> {
+        if self.lock_taken.load(Ordering::SeqCst) && self.finished_before_lock.is_some() {
+            return Ok(self.finished_before_lock.clone());
+        }
         Ok(self.existing.clone())
     }
 
-    async fn acquire_lock(&self, key: &str) -> Result<bool, StoreDown> {
-        Ok(self.held_locks.lock().await.insert(key.to_string()))
+    async fn acquire_lock(&self, key: &str) -> Result<Option<LockToken>, StoreDown> {
+        self.lock_taken.store(true, Ordering::SeqCst);
+        let mut held = self.held_locks.lock().await;
+        if held.contains_key(key) {
+            return Ok(None);
+        }
+        let token = LockToken(self.tokens_issued.fetch_add(1, Ordering::SeqCst));
+        held.insert(key.to_string(), token);
+        Ok(Some(token))
     }
 
-    async fn release_lock(&self, key: &str) -> Result<(), StoreDown> {
-        self.held_locks.lock().await.remove(key);
+    async fn release_lock(&self, key: &str, token: LockToken) -> Result<(), StoreDown> {
+        let mut held = self.held_locks.lock().await;
+        if held.get(key) == Some(&token) {
+            held.remove(key);
+        }
         self.lock_released.notify_one();
         Ok(())
     }
@@ -511,7 +551,7 @@ async fn a_racing_request_is_turned_away() {
     let mut story = Story::new("A racing request is turned away");
     story.given("another request holds the lock for this key");
     let store = Arc::new(FakeStore {
-        held_locks: Mutex::new(HashSet::from(["key_1".to_string()])),
+        held_locks: Mutex::new(HashMap::from([("key_1".to_string(), LockToken(99))])),
         ..FakeStore::default()
     });
     let provider = ScriptedProvider::replying([Reply::Accept]);
@@ -524,6 +564,28 @@ async fn a_racing_request_is_turned_away() {
         assert_eq!(outcome, Err(PayError::Conflict));
     });
     story.expect_step("the provider was not called", || {
+        assert!(references.is_empty());
+    });
+}
+
+#[tokio::test]
+async fn a_request_that_finds_the_lock_free_checks_again_before_charging() {
+    let mut story = Story::new("A request that lost a race doesn't charge again");
+    story.given("a racing request finishes after our lookup and before our lock");
+    let store = Arc::new(FakeStore {
+        finished_before_lock: Some("pay_0".to_string()),
+        ..FakeStore::default()
+    });
+    let provider = ScriptedProvider::replying([Reply::Accept]);
+
+    story.when("the payment is created");
+    let outcome = create_payment(request(), &deps(&store, &provider)).await;
+    let references = provider.references().await;
+
+    story.expect_step("the caller gets the racing request's payment", || {
+        assert_eq!(outcome, Ok("pay_0".to_string()));
+    });
+    story.expect_step("nobody is charged again", || {
         assert!(references.is_empty());
     });
 }
@@ -689,6 +751,33 @@ async fn a_cancelled_request_can_be_tried_again() {
     story.expect_step("the key was free for the retry", || {
         assert!(released);
         assert_eq!(retried, Ok("pay_1".to_string()));
+    });
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_late_cleanup_leaves_the_next_requests_lock_alone() {
+    let mut story = Story::new("A late cleanup leaves the next request's lock alone");
+    story.given("a request whose lock expires while the provider hangs");
+    let store = Arc::new(FakeStore::default());
+    let provider = ScriptedProvider::replying([Reply::Hang]);
+    let deps = deps(&store, &provider);
+    let mut first = Box::pin(create_payment(request(), &deps));
+    let still_running = timeout(Duration::from_secs(1), &mut first).await;
+    store.expire_lock("key_1").await;
+
+    story.when("a second request takes the key, then the first is cancelled");
+    let second = store.acquire_lock("key_1").await;
+    drop(first);
+    let cleanup_ran = lock_released(&store).await;
+    let held = store.held_locks.lock().await.get("key_1").copied();
+
+    story.expect_step("the first request's cleanup ran", || {
+        assert!(still_running.is_err());
+        assert!(cleanup_ran);
+    });
+    story.expect_step("the second request still holds the lock", || {
+        assert!(held.is_some());
+        assert_eq!(second, Ok(held));
     });
 }
 

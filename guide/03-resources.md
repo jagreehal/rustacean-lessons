@@ -58,8 +58,9 @@ flowchart TD
 ```
 
 Other languages give you `try/finally` or `defer`, and you must remember to write them.
-Here the type carries the cleanup, so you can't forget. Values drop in reverse order,
-so a session closes before the pool it came from.
+Here the type carries the cleanup, so you can't forget. Local variables drop in reverse
+order, so a session closes before the pool it came from. Struct fields drop in the order
+you declare them, so a struct lists the session above its pool.
 
 The name for this pattern is RAII, and you'll see it across Rust. A `MutexGuard`
 unlocks in its `Drop`. A file closes in its `Drop`.
@@ -124,7 +125,8 @@ There's a limit. Inside an `Arc` you share the value, so you can't hand it over.
 | 3 | A failed build returns an error | `lesson_3_a_failed_build_returns_an_error_not_an_app` |
 | 4 | `Drop` runs on early return | `lesson_4_drop_runs_on_early_return` |
 | 4 | `Drop` runs on panic | `lesson_4_drop_runs_on_panic` |
-| 4 | Resources close in reverse order | `lesson_4_resources_close_in_reverse_order` |
+| 4 | Local variables close in reverse order | `lesson_4_resources_close_in_reverse_order` |
+| 4 | Struct fields close in declaration order | `lesson_4_struct_fields_close_in_declaration_order` |
 | 5 | Cancellation skips async cleanup | `lesson_5_cancellation_skips_async_cleanup` |
 | 6 | Using a closed session can't compile | `lesson_6_using_a_closed_session_does_not_compile` |
 

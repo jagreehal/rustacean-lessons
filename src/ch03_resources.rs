@@ -206,6 +206,28 @@ fn lesson_4_resources_close_in_reverse_order() {
     );
 }
 
+// Struct fields go the other way: they drop in the order you declare them. So a
+// struct lists a session above the pool it came from.
+#[test]
+fn lesson_4_struct_fields_close_in_declaration_order() {
+    struct Wired {
+        _session: Guard,
+        _pool: Guard,
+    }
+
+    let events = Events::default();
+    {
+        let _wired = Wired {
+            _session: Guard::open("open session", "close session", &events),
+            _pool: Guard::open("open pool", "close pool", &events),
+        };
+    }
+    assert_eq!(
+        events.all(),
+        vec!["open session", "open pool", "close session", "close pool"]
+    );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Lesson 5: async cleanup. GAP.
 //
@@ -220,7 +242,8 @@ fn lesson_4_resources_close_in_reverse_order() {
 //
 // Answer: no. Cancelling in Rust means dropping the future, so everything after
 // the current `.await` never happens. Drop still runs, though, so that's the
-// Rust-shaped fix: what must happen goes in Drop, and if it's async, Drop spawns it.
+// Rust-shaped fix: cleanup goes in Drop, and if it's async, Drop spawns it. That
+// survives cancellation and not a runtime shutdown, so it still needs a backstop.
 // Chapter 7's LockGuard is that pattern in full.
 // ─────────────────────────────────────────────────────────────
 

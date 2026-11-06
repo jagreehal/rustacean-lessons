@@ -105,6 +105,74 @@ fn lesson_2_three_silent_drops_still_get_through() -> Result<(), std::io::Error>
 }
 
 // ─────────────────────────────────────────────────────────────
+// Lesson 3: the rails you can install match the rails tested here.
+//
+// skills/rust-guard-rails/SKILL.md hands this config to other projects. A copy
+// drifts, so this test fails until the skill matches Cargo.toml and clippy.toml.
+// ─────────────────────────────────────────────────────────────
+
+#[test]
+fn lesson_3_the_guard_rails_skill_installs_these_rails() -> Result<(), std::io::Error> {
+    let skill = fs::read_to_string("skills/rust-guard-rails/SKILL.md")?;
+    let manifest = fs::read_to_string("Cargo.toml")?;
+    let banned_methods = fs::read_to_string("clippy.toml")?;
+    let lints = manifest
+        .split_once("[lints.rust]")
+        .map_or("", |(_, lints)| lints);
+
+    assert!(!lints.is_empty(), "Cargo.toml has no [lints.rust]");
+    assert!(skill.contains(lints), "the skill's lints have drifted");
+    assert!(
+        skill.contains(&banned_methods),
+        "the skill's clippy.toml has drifted"
+    );
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────
+// Lesson 4: each skill stands alone.
+//
+// People install one skill, or copy one folder, so a skill can't point at another.
+// ─────────────────────────────────────────────────────────────
+
+fn relative_links(markdown: &str) -> Vec<&str> {
+    markdown
+        .split("](")
+        .skip(1)
+        .map(|rest| rest.split_once(')').map_or(rest, |(link, _)| link))
+        .filter(|link| !link.starts_with("https://"))
+        .collect()
+}
+
+#[test]
+fn lesson_4_a_skill_can_link_by_full_url_only() {
+    let markdown = "[guide](https://example.com/guide.md) and [local](../guide.md)";
+
+    assert_eq!(relative_links(markdown), vec!["../guide.md"]);
+}
+
+#[test]
+fn lesson_4_each_skill_stands_alone() -> Result<(), std::io::Error> {
+    let names = fs::read_dir("skills")?
+        .map(|entry| Ok(entry?.file_name().to_string_lossy().into_owned()))
+        .collect::<Result<Vec<String>, std::io::Error>>()?;
+    assert!(names.len() >= 7, "found only {names:?}");
+
+    for name in &names {
+        let skill = fs::read_to_string(format!("skills/{name}/SKILL.md"))?;
+        assert!(
+            skill.contains(&format!("name: {name}\n")),
+            "{name} misnamed"
+        );
+        assert_eq!(relative_links(&skill), Vec::<&str>::new(), "{name}");
+        for other in names.iter().filter(|other| *other != name) {
+            assert!(!skill.contains(other.as_str()), "{name} needs {other}");
+        }
+    }
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────
 // Exercise: `cargo test ch06 -- --ignored`
 //
 //   1. Pick a mistake you've made in Rust and find the clippy lint for it.

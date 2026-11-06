@@ -20,6 +20,9 @@ they exist, and `src/` proves them.
   Create its `.stderr` with `TRYBUILD=overwrite cargo test --test compile_fail`,
   then read it to check it fails for the reason the lesson gives.
 - A new denied lint in `Cargo.toml` needs `tests/lint_fail/<lint>.rs`.
+- `skills/` distils the chapters for other projects. Change a chapter's rules and you
+  change its skill too. Each skill stands alone: one folder, no mention of another
+  skill, and guides linked by full URL as optional background.
 - Writing: explain each new concept and why it exists before using it. Use Mermaid
   diagrams in `guide/`, because they don't render in `.rs` comments. Prefer active
   voice and "you", no em dashes, no filler adverbs, and state the point directly with no contrast setups.
