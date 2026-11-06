@@ -1,0 +1,5 @@
+error[E0063]: missing field `db` in initializer of `Greeter`
+  --> tests/compile_fail/ch02_missing_dependency.rs:11:20
+   |
+11 |     let _greeter = Greeter {};
+   |                    ^^^^^^^ missing `db`

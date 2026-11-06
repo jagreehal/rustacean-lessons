@@ -1,0 +1,20 @@
+error[E0004]: non-exhaustive patterns: `PayError::Frozen` not covered
+  --> tests/compile_fail/ch01_new_variant_not_handled.rs:9:11
+   |
+ 9 |     match error {
+   |           ^^^^^ pattern `PayError::Frozen` not covered
+   |
+note: `PayError` defined here
+  --> tests/compile_fail/ch01_new_variant_not_handled.rs:2:6
+   |
+ 2 | enum PayError {
+   |      ^^^^^^^^
+...
+ 5 |     Frozen,
+   |     ------ not covered
+   = note: the matched value is of type `PayError`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown
+   |
+11 ~         PayError::Timeout => "try again",
+12 ~         PayError::Frozen => todo!(),
+   |

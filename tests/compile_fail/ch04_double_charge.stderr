@@ -1,0 +1,15 @@
+error[E0382]: use of moved value: `validated`
+  --> tests/compile_fail/ch04_double_charge.rs:14:19
+   |
+12 |     let validated = Validated;
+   |         --------- move occurs because `validated` has type `Validated`, which does not implement the `Copy` trait
+13 |     let _first = validated.charge();
+   |                            -------- `validated` moved due to this method call
+14 |     let _second = validated.charge();
+   |                   ^^^^^^^^^ value used here after move
+   |
+note: `Validated::charge` takes ownership of the receiver `self`, which moves `validated`
+  --> tests/compile_fail/ch04_double_charge.rs:6:15
+   |
+ 6 |     fn charge(self) -> Charged {
+   |               ^^^^

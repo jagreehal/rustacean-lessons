@@ -1,0 +1,8 @@
+# Ambient inputs a function could grab without saying so in its signature.
+# Convention isn't enough, so these fail the build.
+disallowed-methods = [
+  { path = "std::time::Instant::now", reason = "take a clock through deps" },
+  { path = "std::time::SystemTime::now", reason = "take a clock through deps" },
+  { path = "std::env::var", reason = "read config in main and pass it through deps" },
+  { path = "std::thread::sleep", reason = "blocks the async runtime, use tokio::time::sleep" },
+]

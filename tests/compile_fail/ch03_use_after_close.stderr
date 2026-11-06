@@ -1,0 +1,15 @@
+error[E0382]: borrow of moved value: `session`
+  --> tests/compile_fail/ch03_use_after_close.rs:15:20
+   |
+13 |     let session = Session;
+   |         ------- move occurs because `session` has type `Session`, which does not implement the `Copy` trait
+14 |     session.close();
+   |             ------- `session` moved due to this method call
+15 |     println!("{}", session.query());
+   |                    ^^^^^^^ value borrowed here after move
+   |
+note: `Session::close` takes ownership of the receiver `self`, which moves `session`
+  --> tests/compile_fail/ch03_use_after_close.rs:9:14
+   |
+ 9 |     fn close(self) {}
+   |              ^^^^

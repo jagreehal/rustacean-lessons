@@ -1,0 +1,8 @@
+error[E0599]: no method named `charge` found for struct `ValidPayment` in the current scope
+  --> tests/compile_fail/ch07_charge_without_lock.rs:20:33
+   |
+ 2 | struct ValidPayment;
+   | ------------------- method `charge` not found for this struct
+...
+20 |     let _charged = ValidPayment.charge();
+   |                                 ^^^^^^ method not found in `ValidPayment`

@@ -1,0 +1,18 @@
+error[E0603]: tuple struct constructor `Amount` is private
+  --> tests/compile_fail/ch04_forged_amount.rs:13:25
+   |
+ 3 |     pub struct Amount(u32);
+   |                       --- a constructor is private if any of the fields is private
+...
+13 |     let forged = money::Amount(0);
+   |                         ^^^^^^ private tuple struct constructor
+   |
+note: the tuple struct constructor `Amount` is defined here
+  --> tests/compile_fail/ch04_forged_amount.rs:3:5
+   |
+ 3 |     pub struct Amount(u32);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+help: consider making the field publicly accessible
+   |
+ 3 |     pub struct Amount(pub u32);
+   |                       +++

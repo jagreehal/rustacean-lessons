@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # The tag is the Rust version, pinned on purpose to match rust-toolchain.toml.
+      - dependency-name: dtolnay/rust-toolchain

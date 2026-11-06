@@ -1,0 +1,38 @@
+[package]
+name = "rustacean-lessons"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT"
+description = "Lessons in writing Rust services where wrong programs fail the build"
+repository = "https://github.com/jagreehal/rustacean-lessons"
+
+# Every lesson is test code, so nothing here ships in a library build.
+[dev-dependencies]
+async-trait = "0.1"
+executable-stories = "0.2"
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "test-util", "time"] }
+trybuild = "1"
+
+# The guard rails. Chapter 6 tests that each one catches a real mistake.
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+as_conversions = "deny"
+await_holding_lock = "deny"
+disallowed_methods = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+let_underscore_future = "deny"
+let_underscore_must_use = "deny"
+map_err_ignore = "deny"
+panic = "deny"
+unwrap_used = "deny"
+wildcard_enum_match_arm = "deny"

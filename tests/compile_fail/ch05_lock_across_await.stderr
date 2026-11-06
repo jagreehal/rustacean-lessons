@@ -1,0 +1,26 @@
+error: future cannot be sent between threads safely
+  --> tests/compile_fail/ch05_lock_across_await.rs:9:5
+   |
+ 9 | /     tokio::spawn(async move {
+10 | |         let guard = counter.lock();
+11 | |         tokio::time::sleep(Duration::from_secs(1)).await;
+12 | |         drop(guard);
+13 | |     });
+   | |______^ future created by async block is not `Send`
+   |
+   = help: within `{async block@$DIR/tests/compile_fail/ch05_lock_across_await.rs:9:18: 9:28}`, the trait `Send` is not implemented for `std::sync::MutexGuard<'_, i32>`
+note: future is not `Send` as this value is used across an await
+  --> tests/compile_fail/ch05_lock_across_await.rs:11:52
+   |
+10 |         let guard = counter.lock();
+   |             ----- has type `Result<std::sync::MutexGuard<'_, i32>, PoisonError<std::sync::MutexGuard<'_, i32>>>` which is not `Send`
+11 |         tokio::time::sleep(Duration::from_secs(1)).await;
+   |                                                    ^^^^^ await occurs here, with `guard` maybe used later
+note: required by a bound in `tokio::spawn`
+  --> $CARGO/tokio-$VERSION/src/task/spawn.rs
+   |
+   |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+   |            ----- required by a bound in this function
+   |     where
+   |         F: Future + Send + 'static,
+   |                     ^^^^ required by this bound in `spawn`

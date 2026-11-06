@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  # Weekly: new RustSec advisories land without any code change here.
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: make check
+
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      # Advisories, licences, banned crates and sources: policy in deny.toml.
+      - run: make deny

@@ -1,0 +1,8 @@
+error[E0599]: no method named `charge` found for struct `Draft` in the current scope
+  --> tests/compile_fail/ch04_charge_unvalidated.rs:20:26
+   |
+ 2 | struct Draft;
+   | ------------ method `charge` not found for this struct
+...
+20 |     let _charged = Draft.charge();
+   |                          ^^^^^^ method not found in `Draft`

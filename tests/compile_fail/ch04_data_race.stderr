@@ -1,0 +1,18 @@
+error[E0499]: cannot borrow `count` as mutable more than once at a time
+ --> tests/compile_fail/ch04_data_race.rs:9:21
+  |
+7 |     thread::scope(|scope| {
+  |                    ----- has type `&'1 Scope<'1, '_>`
+8 |         scope.spawn(|| count += 1);
+  |         --------------------------
+  |         |           |  |
+  |         |           |  first borrow occurs due to use of `count` in closure
+  |         |           first mutable borrow occurs here
+  |         argument requires that `count` is borrowed for `'1`
+9 |         scope.spawn(|| count += 1);
+  |                     ^^ ----- second borrow occurs due to use of `count` in closure
+  |                     |
+  |                     second mutable borrow occurs here
+  |
+note: requirement that the value outlives `'1` introduced here
+ --> $RUST/std/src/thread/scoped.rs
